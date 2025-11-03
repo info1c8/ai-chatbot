@@ -10,14 +10,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import { saveAs } from 'file-saver';
-import { 
-  Menu, 
-  X, 
-  MessageSquare, 
-  Loader2,
-  AlertCircle,
-  Sparkles
-} from 'lucide-react';
+import { Menu, X, MessageSquare, Loader as Loader2, CircleAlert as AlertCircle, Sparkles } from 'lucide-react';
 
 export const ChatInterface: React.FC = () => {
   const [sessions, setSessions] = useLocalStorage<ChatSession[]>('chat-sessions', []);

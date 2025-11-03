@@ -3,16 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Send, 
-  Paperclip, 
-  X, 
-  FileText, 
-  Image, 
-  Loader2,
-  Mic,
-  MicOff
-} from 'lucide-react';
+import { Send, Paperclip, X, FileText, Image, Loader as Loader2, Mic, MicOff } from 'lucide-react';
 import { AttachedFile } from '@/types/chat';
 import { createAttachedFile, formatFileSize, isTextFile, isImageFile } from '@/lib/fileUtils';
 import { toast } from '@/hooks/use-toast';

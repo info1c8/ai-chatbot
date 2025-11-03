@@ -17,17 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { CerebrasConfig } from '@/types/chat';
 import { CerebrasClient } from '@/lib/cerebras';
 import { toast } from '@/hooks/use-toast';
-import { 
-  Settings, 
-  Key, 
-  Brain, 
-  Palette, 
-  Shield,
-  Info,
-  CheckCircle,
-  XCircle,
-  Loader2
-} from 'lucide-react';
+import { Settings, Key, Brain, Palette, Shield, Info, CircleCheck as CheckCircle, Circle as XCircle, Loader as Loader2 } from 'lucide-react';
 
 interface SettingsDialogProps {
   open: boolean;
