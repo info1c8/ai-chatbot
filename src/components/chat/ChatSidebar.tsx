@@ -5,11 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { 
-  Plus, MessageSquare, Trash2, Settings, Download, Upload, History,
-  Search, Filter, Star, Archive, Tag, Calendar, MoreHorizontal,
-  Pin, Edit, Share, Bookmark, TrendingUp, Clock, DollarSign
-} from 'lucide-react';
+import { Plus, MessageSquare, Trash2, Settings, Download, Upload, History, Search, Filter, Star, Archive, Tag, Calendar, MoveHorizontal as MoreHorizontal, Pin, CreditCard as Edit, Share, Bookmark, TrendingUp, Clock, DollarSign } from 'lucide-react';
 import { ChatSession, SearchFilters } from '@/types/chat';
 import { useSearch } from '@/hooks/useSearch';
 import {

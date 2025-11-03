@@ -8,12 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Copy, Download, User, Bot, Check, Image, FileText, Edit, 
-  MoreHorizontal, Share, Bookmark, ThumbsUp, ThumbsDown,
-  Clock, Zap, DollarSign, Globe, Heart, Smile, Frown,
-  Eye, EyeOff, Volume2, VolumeX, Maximize, Minimize
-} from 'lucide-react';
+import { Copy, Download, User, Bot, Check, Image, FileText, CreditCard as Edit, MoveHorizontal as MoreHorizontal, Share, Bookmark, ThumbsUp, ThumbsDown, Clock, Zap, DollarSign, Globe, Heart, Smile, Frown, Eye, EyeOff, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { saveAs } from 'file-saver';
 import { formatFileSize } from '@/lib/fileUtils';
