@@ -1,0 +1,373 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Message, ChatSession, CerebrasConfig, AttachedFile } from '@/types/chat';
+import { CerebrasClient } from '@/lib/cerebras';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { MessageBubble } from './MessageBubble';
+import { ChatInput } from './ChatInput';
+import { ChatSidebar } from './ChatSidebar';
+import { SettingsDialog } from './SettingsDialog';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from '@/hooks/use-toast';
+import { saveAs } from 'file-saver';
+import { 
+  Menu, 
+  X, 
+  MessageSquare, 
+  Loader2,
+  AlertCircle,
+  Sparkles
+} from 'lucide-react';
+
+export const ChatInterface: React.FC = () => {
+  const [sessions, setSessions] = useLocalStorage<ChatSession[]>('chat-sessions', []);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [config, setConfig] = useLocalStorage<CerebrasConfig>('cerebras-config', {
+    apiKey: '',
+    model: 'llama3.1-8b',
+    temperature: 0.7,
+    maxTokens: 4096,
+    topP: 0.9,
+  });
+
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const cerebrasClient = useRef<CerebrasClient | null>(null);
+
+  // Инициализация клиента
+  useEffect(() => {
+    if (config.apiKey) {
+      cerebrasClient.current = new CerebrasClient(config.apiKey);
+    }
+  }, [config.apiKey]);
+
+  // Автоскролл к последнему сообщению
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentSessionId, isStreaming, streamingMessage]);
+
+  // Создание новой сессии при первом запуске
+  useEffect(() => {
+    if (sessions.length === 0) {
+      createNewSession();
+    } else if (!currentSessionId) {
+      setCurrentSessionId(sessions[0].id);
+    }
+  }, [sessions, currentSessionId]);
+
+  const getCurrentSession = (): ChatSession | null => {
+    return sessions.find(s => s.id === currentSessionId) || null;
+  };
+
+  const createNewSession = () => {
+    const newSession: ChatSession = {
+      id: crypto.randomUUID(),
+      title: 'Новый чат',
+      messages: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+  };
+
+  const updateSession = (sessionId: string, updates: Partial<ChatSession>) => {
+    setSessions(prev => prev.map(session => 
+      session.id === sessionId 
+        ? { ...session, ...updates, updatedAt: new Date() }
+        : session
+    ));
+  };
+
+  const deleteSession = (sessionId: string) => {
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    
+    if (currentSessionId === sessionId) {
+      const remainingSessions = sessions.filter(s => s.id !== sessionId);
+      if (remainingSessions.length > 0) {
+        setCurrentSessionId(remainingSessions[0].id);
+      } else {
+        createNewSession();
+      }
+    }
+
+    toast({
+      title: "Чат удален",
+      description: "Сессия чата была успешно удалена",
+    });
+  };
+
+  const generateTitle = (content: string): string => {
+    const words = content.trim().split(' ').slice(0, 6);
+    return words.join(' ') + (content.split(' ').length > 6 ? '...' : '');
+  };
+
+  const sendMessage = async (content: string, files: AttachedFile[]) => {
+    if (!cerebrasClient.current) {
+      toast({
+        title: "Ошибка",
+        description: "Настройте API ключ в настройках",
+        variant: "destructive",
+      });
+      setSettingsOpen(true);
+      return;
+    }
+
+    const currentSession = getCurrentSession();
+    if (!currentSession) return;
+
+    // Создаем сообщение пользователя
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content,
+      files,
+      timestamp: new Date(),
+    };
+
+    // Обновляем сессию с сообщением пользователя
+    const updatedMessages = [...currentSession.messages, userMessage];
+    updateSession(currentSession.id, { 
+      messages: updatedMessages,
+      title: currentSession.messages.length === 0 ? generateTitle(content) : currentSession.title
+    });
+
+    setIsLoading(true);
+    setIsStreaming(true);
+    setStreamingMessage('');
+
+    try {
+      // Создаем временное сообщение ассистента
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+      };
+
+      let fullResponse = '';
+
+      // Используем потоковый режим
+      await cerebrasClient.current.sendMessageStream(
+        updatedMessages,
+        config,
+        (chunk: string) => {
+          fullResponse += chunk;
+          setStreamingMessage(fullResponse);
+        }
+      );
+
+      // Обновляем сообщение с полным ответом
+      assistantMessage.content = fullResponse;
+      const finalMessages = [...updatedMessages, assistantMessage];
+      
+      updateSession(currentSession.id, { messages: finalMessages });
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      
+      const errorMessage: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `Произошла ошибка: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`,
+        timestamp: new Date(),
+      };
+
+      const errorMessages = [...updatedMessages, errorMessage];
+      updateSession(currentSession.id, { messages: errorMessages });
+
+      toast({
+        title: "Ошибка отправки",
+        description: error instanceof Error ? error.message : 'Не удалось отправить сообщение',
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+      setIsStreaming(false);
+      setStreamingMessage('');
+    }
+  };
+
+  const exportSessions = () => {
+    const dataStr = JSON.stringify(sessions, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    saveAs(blob, `chat-sessions-${timestamp}.json`);
+    
+    toast({
+      title: "Экспорт завершен",
+      description: "Сессии чатов экспортированы в файл",
+    });
+  };
+
+  const importSessions = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedSessions = JSON.parse(e.target?.result as string);
+        setSessions(prev => [...importedSessions, ...prev]);
+        
+        toast({
+          title: "Импорт завершен",
+          description: `Импортировано ${importedSessions.length} сессий`,
+        });
+      } catch (error) {
+        toast({
+          title: "Ошибка импорта",
+          description: "Не удалось импортировать файл",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsText(file);
+    
+    // Очистка input
+    event.target.value = '';
+  };
+
+  const currentSession = getCurrentSession();
+  const allMessages = currentSession?.messages || [];
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      {/* Боковая панель */}
+      {sidebarOpen && (
+        <div className="flex-shrink-0">
+          <ChatSidebar
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onNewChat={createNewSession}
+            onSelectSession={setCurrentSessionId}
+            onDeleteSession={deleteSession}
+            onExportSessions={exportSessions}
+            onImportSessions={importSessions}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        </div>
+      )}
+
+      {/* Основная область чата */}
+      <div className="flex-1 flex flex-col">
+        {/* Заголовок */}
+        <div className="bg-white border-b px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </Button>
+            
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-blue-500" />
+              <h1 className="text-lg font-semibold">
+                {currentSession?.title || 'AI Chat Bot'}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!config.apiKey && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                className="text-orange-600 border-orange-200"
+              >
+                <AlertCircle className="w-4 h-4 mr-1" />
+                Настроить API
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Область сообщений */}
+        <ScrollArea className="flex-1 p-4">
+          {allMessages.length === 0 && !isStreaming ? (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <MessageSquare className="w-16 h-16 text-gray-300 mb-4" />
+              <h2 className="text-xl font-semibold text-gray-600 mb-2">
+                Добро пожаловать в AI Chat Bot!
+              </h2>
+              <p className="text-gray-500 mb-4 max-w-md">
+                Начните разговор с искусственным интеллектом. 
+                Вы можете задавать вопросы, прикреплять файлы и получать ответы в формате Markdown.
+              </p>
+              {!config.apiKey && (
+                <Button onClick={() => setSettingsOpen(true)}>
+                  Настроить API ключ
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto">
+              {allMessages.map((message) => (
+                <MessageBubble key={message.id} message={message} />
+              ))}
+              
+              {/* Потоковое сообщение */}
+              {isStreaming && streamingMessage && (
+                <MessageBubble
+                  message={{
+                    id: 'streaming',
+                    role: 'assistant',
+                    content: streamingMessage,
+                    timestamp: new Date(),
+                  }}
+                />
+              )}
+              
+              {/* Индикатор загрузки */}
+              {isLoading && !streamingMessage && (
+                <div className="flex gap-3 mb-6">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  </div>
+                  <div className="flex-1 max-w-[80%]">
+                    <div className="bg-gray-100 rounded-lg p-4">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>ИИ думает...</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </ScrollArea>
+
+        {/* Поле ввода */}
+        <div className="border-t bg-white">
+          <div className="max-w-4xl mx-auto">
+            <ChatInput
+              onSendMessage={sendMessage}
+              isLoading={isLoading}
+              disabled={!config.apiKey}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Диалог настроек */}
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        config={config}
+        onConfigChange={setConfig}
+      />
+    </div>
+  );
+};
